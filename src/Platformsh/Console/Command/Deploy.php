@@ -293,7 +293,7 @@ class Deploy extends Command
         $this->env->log("Running setup upgrade.");
 
         $this->env->execute(
-            "cd bin/; /usr/bin/php ./magento setup:upgrade {$this->verbosityLevel}"
+            "cd bin/; /usr/bin/php ./magento setup:upgrade {$this->verbosityLevel} --keep-generated"
         );
     }
 
