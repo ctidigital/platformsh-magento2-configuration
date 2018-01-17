@@ -74,22 +74,6 @@ class Build extends Command
         $this->clearInitDir();
         $this->env->execute('rm -rf app/etc/env.php');
 
-        /**
-         * Writable directories will be erased when the writable filesystem is mounted to them. This
-         * step backs them up to ./init/
-         */
-        $this->env->log("Moving static content to init directory");
-        $this->env->execute('mkdir -p ./init/pub/');
-        if (file_exists('./init/pub/static')) {
-            $this->env->log("Remove ./init/pub/static");
-            unlink('./init/pub/static');
-        }
-        $this->env->execute('cp -R ./pub/static/ ./init/pub/static');
-        copy(
-            Environment::MAGENTO_ROOT . '/.static_content_deploy',
-            Environment::MAGENTO_ROOT . 'init/' . '/.static_content_deploy'
-        );
-
         $this->env->log("Copying writable directories to temp directory.");
 
         foreach ($this->env->writableDirs as $dir) {
@@ -150,8 +134,6 @@ class Build extends Command
     private function compileDI()
     {
         $this->env->execute('rm -rf generated/*');
-
-        $this->env->log("Enabling all modules");
 
         if (!$this->getBuildOption(self::BUILD_OPT_SKIP_DI_COMPILATION)) {
             $this->env->log("Running DI compilation");
