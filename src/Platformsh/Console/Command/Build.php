@@ -24,6 +24,8 @@ class Build extends Command
     const BUILD_OPT_SCD_EXCLUDE_THEMES = 'exclude_themes';
     const BUILD_OPT_SCD_THREADS = 'scd_threads';
     const BUILD_OPT_SKIP_SCD = 'skip_scd';
+    const MAGENTO_PRODUCTION_MODE = 'production';
+    const MAGENTO_DEVELOPER_MODE = 'developer';
 
     /**
      * @var Environment
@@ -40,6 +42,34 @@ class Build extends Command
     private $staticDeployThreads;
     private $staticDeployExcludeThemes = [];
     private $verbosityLevel;
+
+    private $dbHost;
+    private $dbName;
+    private $dbUser;
+    private $dbPassword;
+
+    private $adminUsername;
+    private $adminFirstname;
+    private $adminLastname;
+    private $adminEmail;
+    private $adminPassword;
+    private $adminUrl;
+    private $enableUpdateUrls;
+
+    private $redisHost;
+    private $redisPort;
+    private $redisSessionDb = '0';
+    private $redisCacheDb = '1'; // Value hard-coded in pre-deploy.php
+
+    private $solrHost;
+    private $solrPath;
+    private $solrPort;
+    private $solrScheme;
+
+    private $isMasterBranch = null;
+    private $magentoApplicationMode;
+    private $adminLocale;
+
 
     /**
      * {@inheritdoc}
@@ -66,6 +96,7 @@ class Build extends Command
     {
         $this->env->log("Start build.");
         $this->setEnvData();
+        $this->updateConfiguration();
         $this->applyMccPatches();
         $this->applyCommittedPatches();
         $this->compileDI();
@@ -118,6 +149,49 @@ class Build extends Command
         } else { // if Paas environment
             $this->staticDeployThreads = 1;
         }
+        $this->verbosityLevel = isset($var['VERBOSE_COMMANDS']) && $var['VERBOSE_COMMANDS'] == 'enabled' ? ' -vv ' : '';
+
+        $this->env->log("Preparing environment specific data.");
+
+        $this->initRoutes();
+
+        $relationships = $this->env->getRelationships();
+
+        $this->dbHost = $relationships["database"][0]["host"];
+        $this->dbName = $relationships["database"][0]["path"];
+        $this->dbUser = $relationships["database"][0]["username"];
+        $this->dbPassword = $relationships["database"][0]["password"];
+
+        $this->adminUsername = isset($var["ADMIN_USERNAME"]) ? $var["ADMIN_USERNAME"] : "admin";
+        $this->adminFirstname = isset($var["ADMIN_FIRSTNAME"]) ? $var["ADMIN_FIRSTNAME"] : "John";
+        $this->adminLastname = isset($var["ADMIN_LASTNAME"]) ? $var["ADMIN_LASTNAME"] : "Doe";
+        $this->adminEmail = isset($var["ADMIN_EMAIL"]) ? $var["ADMIN_EMAIL"] : "john@example.com";
+        $this->adminPassword = isset($var["ADMIN_PASSWORD"]) ? $var["ADMIN_PASSWORD"] : "admin12";
+        $this->adminUrl = isset($var["ADMIN_URL"]) ? $var["ADMIN_URL"] : "admin";
+        $this->enableUpdateUrls = isset($var["UPDATE_URLS"]) && $var["UPDATE_URLS"] == 'disabled' ? false : true;
+
+        $this->adminLocale = isset($var["ADMIN_LOCALE"]) ? $var["ADMIN_LOCALE"] : "en_US";
+
+        $this->doDeployStaticContent = isset($var["DO_DEPLOY_STATIC_CONTENT"]) && $var["DO_DEPLOY_STATIC_CONTENT"] == 'disabled' ? false : true;
+
+        $this->magentoApplicationMode = isset($var["APPLICATION_MODE"]) ? $var["APPLICATION_MODE"] : false;
+        $this->magentoApplicationMode =
+            in_array($this->magentoApplicationMode, array(self::MAGENTO_DEVELOPER_MODE, self::MAGENTO_PRODUCTION_MODE))
+                ? $this->magentoApplicationMode
+                : self::MAGENTO_PRODUCTION_MODE;
+
+        if (isset($relationships['redis']) && count($relationships['redis']) > 0) {
+            $this->redisHost = $relationships['redis'][0]['host'];
+            $this->redisPort = $relationships['redis'][0]['port'];
+        }
+
+        if (isset($relationships["solr"]) && count($relationships['solr']) > 0) {
+            $this->solrHost = $relationships["solr"][0]["host"];
+            $this->solrPath = $relationships["solr"][0]["path"];
+            $this->solrPort = $relationships["solr"][0]["port"];
+            $this->solrScheme = $relationships["solr"][0]["scheme"];
+        }
+
         $this->verbosityLevel = isset($var['VERBOSE_COMMANDS']) && $var['VERBOSE_COMMANDS'] == 'enabled' ? ' -vv ' : '';
     }
 
@@ -298,5 +372,45 @@ class Build extends Command
             }
         }
         return array_unique(array_values($filteredResult));
+    }
+
+    /**
+     * Update env.php file content
+     */
+    private function updateConfiguration()
+    {
+        $this->env->log("Updating env.php database configuration.");
+
+        $configFileName = "app/etc/env.php";
+
+        $config = include $configFileName;
+
+        $config['db']['connection']['default']['username'] = $this->dbUser;
+        $config['db']['connection']['default']['host'] = $this->dbHost;
+        $config['db']['connection']['default']['dbname'] = $this->dbName;
+        $config['db']['connection']['default']['password'] = $this->dbPassword;
+
+        $config['db']['connection']['indexer']['username'] = $this->dbUser;
+        $config['db']['connection']['indexer']['host'] = $this->dbHost;
+        $config['db']['connection']['indexer']['dbname'] = $this->dbName;
+        $config['db']['connection']['indexer']['password'] = $this->dbPassword;
+
+        if ($this->redisHost !== null && $this->redisPort !== null) {
+            $this->env->log("Updating env.php Redis cache configuration.");
+            $config['cache'] = $this->getRedisCacheConfiguration();
+            $config['session'] = [
+                'save' => 'redis',
+                'redis' => [
+                    'host' => $this->redisHost,
+                    'port' => $this->redisPort,
+                    'database' => $this->redisSessionDb
+                ]
+            ];
+        }
+        $config['backend']['frontName'] = $this->adminUrl;
+
+        $updatedConfig = '<?php'  . "\n" . 'return ' . var_export($config, true) . ';';
+
+        file_put_contents($configFileName, $updatedConfig);
     }
 }
