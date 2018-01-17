@@ -229,7 +229,7 @@ class Deploy extends Command
     private function updateConfig()
     {
         $this->env->log("Updating configuration from environment variables.");
-//        $this->updateConfiguration();
+        $this->updateConfiguration();
         $this->updateAdminCredentials();
         $this->updateSolrConfiguration();
         $this->updateUrls();
