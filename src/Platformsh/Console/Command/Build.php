@@ -68,9 +68,9 @@ class Build extends Command
         $this->setEnvData();
         $this->applyMccPatches();
         $this->applyCommittedPatches();
+        $this->deployStaticContent();
         $this->compileDI();
         $this->composerDumpAutoload();
-        $this->deployStaticContent();
         $this->clearInitDir();
         $this->env->execute('rm -rf app/etc/env.php');
 
@@ -219,10 +219,9 @@ class Build extends Command
                 $parallelCommands = "";
                 foreach ($locales as $locale) {
                     // @codingStandardsIgnoreStart
-                    $parallelCommands .= "php ./bin/magento setup:static-content:deploy -f $excludeThemesOptions $locale {$this->verbosityLevel}" . '\n';
+                    $this->env->execute("php ./bin/magento setup:static-content:deploy -f $excludeThemesOptions $locale {$this->verbosityLevel}");
                     // @codingStandardsIgnoreEnd
                 }
-                $this->env->execute("printf '$parallelCommands' | xargs -I CMD -P " . (int)$threads . " bash -c CMD");
             } catch (\Exception $e) {
                 $this->env->log($e->getMessage());
                 exit(5);
