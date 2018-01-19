@@ -194,13 +194,10 @@ class Build extends Command
             $SCDLocales = implode(' ', $locales);
 
             $excludeThemesOptions = '';
-            if ($this->getBuildOption(self::BUILD_OPT_SCD_EXCLUDE_THEMES)) {
-                $themes = preg_split("/[,]+/", $this->getBuildOption(self::BUILD_OPT_SCD_EXCLUDE_THEMES));
-                if (count($themes) > 1) {
-                    $excludeThemesOptions = "--exclude-theme=" . implode(' --exclude-theme=', $themes);
-                } elseif (count($themes) === 1) {
-                    $excludeThemesOptions = "--exclude-theme=" . $themes[0];
-                }
+            if ($this->staticDeployExcludeThemes) {
+                $excludeThemesOptions = $this->staticDeployExcludeThemes
+                    ? "--exclude-theme=" . implode(' --exclude-theme=', $this->staticDeployExcludeThemes)
+                    : '';
             }
 
             $threads = $this->getBuildOption(self::BUILD_OPT_SCD_THREADS)
@@ -216,7 +213,6 @@ class Build extends Command
 
                 $this->env->log($logMessage);
 
-                $parallelCommands = "";
                 foreach ($locales as $locale) {
                     // @codingStandardsIgnoreStart
                     $this->env->execute("php ./bin/magento setup:static-content:deploy -f $excludeThemesOptions $locale {$this->verbosityLevel}");
@@ -229,20 +225,6 @@ class Build extends Command
         } else {
             $this->env->log("Skipping static content deploy");
         }
-    }
-
-    private function generateFreshStaticContent()
-    {
-        $excludeThemesOptions = $this->staticDeployExcludeThemes
-            ? "--exclude-theme=" . implode(' --exclude-theme=', $this->staticDeployExcludeThemes)
-            : '';
-        $jobsOption = $this->staticDeployThreads
-            ? "--jobs={$this->staticDeployThreads}"
-            : '';
-
-        $this->env->execute(
-            "/usr/bin/php ./bin/magento setup:static-content:deploy -f $jobsOption $excludeThemesOptions {$this->verbosityLevel}"
-        );
     }
 
     private function composerDumpAutoload()
